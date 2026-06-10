@@ -434,10 +434,21 @@ h1 {
   height: 140px;
 }
 
-/* Node pulse reaction when packet passes through */
+/* Node pulse reaction when packet passes through.
+   The ring is drawn with an enso-like opening (dash gap) that slowly
+   drifts around the circle — asymmetric, never settling. */
 .node-ring-el {
-  animation: nodeRingPulse var(--cycle) ease-out infinite;
+  stroke-dasharray: 540 38;  /* 2πr ≈ 578 → one ~24° opening */
+  animation: nodeRingPulse var(--cycle) ease-out infinite,
+             ringDrift 70s linear infinite;
 }
+@keyframes ringDrift { to { stroke-dashoffset: 578; } }
+
+.node-ring-inner {
+  stroke-dasharray: 310 105; /* 2πr ≈ 415 → wider opening, counter-drift */
+  animation: innerDrift 95s linear infinite;
+}
+@keyframes innerDrift { to { stroke-dashoffset: -415; } }
 @keyframes nodeRingPulse {
   0%,26%   { opacity: 1; }
   27%      { opacity: 0.4; }
@@ -449,23 +460,6 @@ h1 {
 }
 
 /* Slowly rotating orbit ring */
-/* Tick ring spins very slowly — calibration dial, not a rifle scope */
-.tick-ring {
-  transform-box: fill-box;
-  transform-origin: center;
-  animation: tickSpin 50s linear infinite;
-}
-@keyframes tickSpin { to { transform: rotate(360deg); } }
-
-/* Fine crosshair segments softly appear and disappear */
-.cross-fine {
-  animation: crossBreathe 9s ease-in-out infinite;
-}
-@keyframes crossBreathe {
-  0%, 100% { opacity: 0.15; }
-  50%      { opacity: 1; }
-}
-
 /* Orbit: the ellipse stays FIXED; motion happens ALONG it —
    dashes flow around the path and a traveler dot rides it (no propeller spin). */
 .node-orbit-el {
@@ -911,21 +905,14 @@ h1 {
       <!-- center: 480, 264 — radius 92 outer, 66 inner -->
       <circle class="node-ring-el" cx="480" cy="264" r="92"
               stroke="#1a1a1a" stroke-width="1.2" fill="none"/>
-      <!-- Inner tick ring (faint) -->
-      <circle cx="480" cy="264" r="66"
+      <!-- Inner ring (faint, open, counter-drifting) -->
+      <circle class="node-ring-inner" cx="480" cy="264" r="66"
               stroke="rgba(0,0,0,0.1)" stroke-width="0.7" fill="none"/>
 
-      <!-- Tick ring — rotates slowly as one rigid dial, so the 90° marks never sit still -->
-      <g class="tick-ring">
-        <line x1="480" y1="167" x2="480" y2="177" stroke="#1a1a1a" stroke-width="1"/>
-        <line x1="480" y1="351" x2="480" y2="361" stroke="#1a1a1a" stroke-width="1"/>
-        <line x1="383" y1="264" x2="393" y2="264" stroke="#1a1a1a" stroke-width="1"/>
-        <line x1="567" y1="264" x2="577" y2="264" stroke="#1a1a1a" stroke-width="1"/>
-        <line x1="415" y1="199" x2="420" y2="204" stroke="rgba(0,0,0,0.25)" stroke-width="0.8"/>
-        <line x1="545" y1="199" x2="540" y2="204" stroke="rgba(0,0,0,0.25)" stroke-width="0.8"/>
-        <line x1="415" y1="329" x2="420" y2="324" stroke="rgba(0,0,0,0.25)" stroke-width="0.8"/>
-        <line x1="545" y1="329" x2="540" y2="324" stroke="rgba(0,0,0,0.25)" stroke-width="0.8"/>
-      </g>
+      <!-- Three calibration marks at irregular angles/lengths — no symmetry, no scope -->
+      <line x1="534" y1="187" x2="540" y2="179" stroke="#1a1a1a" stroke-width="1"/>
+      <line x1="399" y1="311" x2="393" y2="314" stroke="rgba(0,0,0,0.45)" stroke-width="0.8"/>
+      <line x1="504" y1="355" x2="506" y2="362" stroke="rgba(0,0,0,0.3)" stroke-width="0.9"/>
 
       <!-- Neural-net glyph in the upper arc — subtle "llm inside" cue.
            Replaces the top crosshair segment. 2-3-2 layers, monoline. -->
@@ -952,11 +939,6 @@ h1 {
         <circle class="nn-n5" cx="480" cy="218" r="2.2" stroke="#1a1a1a" stroke-width="0.8" fill="#f5f3ef"/>
         <circle class="nn-n6" cx="510" cy="194" r="2.2" stroke="#1a1a1a" stroke-width="0.8" fill="#f5f3ef"/>
         <circle class="nn-n7" cx="510" cy="212" r="2.2" stroke="#1a1a1a" stroke-width="0.8" fill="#f5f3ef"/>
-      </g>
-      <g class="cross-fine">
-        <line x1="480" y1="316" x2="480" y2="348" stroke="rgba(0,0,0,0.12)" stroke-width="0.7"/>
-        <line x1="396" y1="264" x2="428" y2="264" stroke="rgba(0,0,0,0.12)" stroke-width="0.7"/>
-        <line x1="532" y1="264" x2="564" y2="264" stroke="rgba(0,0,0,0.12)" stroke-width="0.7"/>
       </g>
 
       <!-- Single orbit ellipse — tilted +18° (left side high) for a 3D orbital plane -->
