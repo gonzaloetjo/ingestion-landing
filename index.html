@@ -514,8 +514,9 @@ h1 {
 
 /* Log line timing — absolute windows, same as variant A's approach */
 /* Set A: fires at pkt1 approach ~19% */
-.tl-a1 { animation: tlogA1 var(--cycle) linear infinite; }
-.tl-a2 { animation: tlogA2 var(--cycle) linear infinite; }
+.tl-a1  { animation: tlogA1 var(--cycle) linear infinite; }
+.tl-a1b { animation: tlogA1b var(--cycle) linear infinite; }
+.tl-a2  { animation: tlogA2 var(--cycle) linear infinite; }
 /* Set B: fires at pkt2 ~44% */
 .tl-b1 { animation: tlogB1 var(--cycle) linear infinite; }
 .tl-b2 { animation: tlogB2 var(--cycle) linear infinite; }
@@ -524,6 +525,7 @@ h1 {
 .tl-c2 { animation: tlogC2 var(--cycle) linear infinite; }
 
 @keyframes tlogA1 { 0%,20%{opacity:0} 21%,96%{opacity:1} 97%,100%{opacity:0} }
+@keyframes tlogA1b { 0%,23%{opacity:0} 24%,96%{opacity:1} 97%,100%{opacity:0} }
 @keyframes tlogA2 { 0%,26%{opacity:0} 27%,96%{opacity:1} 97%,100%{opacity:0} }
 @keyframes tlogB1 { 0%,45%{opacity:0} 46%,96%{opacity:1} 97%,100%{opacity:0} }
 @keyframes tlogB2 { 0%,51%{opacity:0} 52%,96%{opacity:1} 97%,100%{opacity:0} }
@@ -810,7 +812,7 @@ h1 {
   <div class="hero-copy">
     <div class="kicker">ETL for everyday life</div>
     <h1>Casual conversation<br><span class="h1-into">into</span> <span class="h1-dim">structured data.</span></h1>
-    <p class="sub">Text like you normally would — “ran 5km this morning”, a photo of dinner. <strong>ingestion</strong> structures it into typed, reviewed rows in the databases your apps already own.</p>
+    <p class="sub">Text like you normally would — “ran 5km this morning”, a photo of dinner. <strong>ingestion</strong> structures it into typed, reviewed rows in the databases your apps already own. If details are missing, it queues the item — or lazily researches your other sources to complete it.</p>
     <ul class="points">
       <li>one contract file per app</li>
       <li>no glue code</li>
@@ -1015,6 +1017,7 @@ h1 {
     <!-- ── Terminal glimpse inside the node ──────────────────────── -->
     <div class="node-terminal" aria-label="ingestion router log" aria-live="polite">
       <span class="tlog tl-a1">▸ route fitness.run (.94)</span>
+      <span class="tlog tl-a1b">▸ fetch garmin · pace, bpm</span>
       <span class="tlog tl-a2">▸ commit a1f3 → fitness.db</span>
       <span class="tlog tl-b1">▸ route meals.dish (.91)</span>
       <span class="tlog tl-b2">▸ commit b7e2 → meals.db</span>
