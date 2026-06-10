@@ -1,0 +1,1168 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ingestion — casual conversation into structured data</title>
+<style>
+/* ── Reset & base ─────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  /* Paper palette — light mode, strictly B&W except animation chroma */
+  --paper:       #f5f3ef;   /* off-white, warm paper tone */
+  --paper-grid:  rgba(0,0,0,0.045);  /* dotted grid */
+  --ink:         #1a1a1a;   /* near-black ink */
+  --ink-dim:     #888;      /* secondary ink, labels */
+  --ink-faint:   #bbb;      /* ghost rails */
+  --ink-rule:    rgba(0,0,0,0.12); /* dimension lines */
+  --border-card: rgba(0,0,0,0.12);
+
+  /* Chroma — appears ONLY at row-landing moments */
+  --c-run:   #3b9e5c;  /* fitness green tick */
+  --c-meal:  #c07520;  /* carbonara amber tick */
+  --c-book:  #2a62b0;  /* books blue tick */
+
+  /* Packet: graphite, picks up destination chroma near end */
+  --pkt-ink: #333;
+
+  --font-mono: ui-monospace, "Cascadia Code", "SF Mono", "Fira Mono", Consolas, monospace;
+  --font-sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-eng: "Georgia", "Times New Roman", serif; /* for annotation labels */
+
+  --cycle: 16s;
+}
+
+html, body {
+  min-height: 100%;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-sans);
+}
+
+/* ── Page layout ─────────────────────────────────────────────────── */
+.page {
+  max-width: 1020px;
+  margin: 0 auto;
+  padding: 0 24px 56px;
+}
+
+/* ── Header ──────────────────────────────────────────────────────── */
+.hero-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 22px 0;
+}
+
+.wordmark {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.btn-gh {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: var(--ink-dim);
+  background: transparent;
+  border: 1px solid var(--ink-rule);
+  border-radius: 3px;
+  padding: 7px 16px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+.btn-gh:hover {
+  color: var(--ink);
+  border-color: var(--ink-dim);
+}
+
+/* ── Hero copy ───────────────────────────────────────────────────── */
+/* Hero copy sits centered on the same vertical axis as the waterfall:
+   kicker → headline → sub → node → footnote form one spine down the page.
+   Asymmetric elements (header, telemetry, annotations) stay corner-anchored. */
+.hero-copy {
+  text-align: center;
+  padding: 28px 0 14px;
+}
+
+h1 {
+  font-family: var(--font-sans);
+  font-size: clamp(22px, 3.5vw, 38px);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: var(--ink);
+  line-height: 1.15;
+}
+/* three-grade headline: ink → faint connector → dim */
+.h1-dim  { color: var(--ink-dim); }
+.h1-into { color: var(--ink-faint); font-weight: 500; }
+
+/* drafting-style kicker above the headline */
+.kicker {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  margin-bottom: 10px;
+}
+
+.sub {
+  max-width: 580px;
+  margin: 12px auto 0;
+  color: var(--ink-dim);
+  font-size: 15px;
+  line-height: 1.6;
+}
+.sub strong { color: var(--ink); font-weight: 600; }
+
+/* Minimal claim points — square markers echo the data packets */
+.points {
+  list-style: none;
+  display: flex;
+  justify-content: center;
+  gap: 28px;
+  margin-top: 16px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-dim);
+  letter-spacing: 0.02em;
+}
+.points li { display: flex; align-items: center; gap: 7px; }
+.points li::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border: 1.2px solid var(--ink);
+  background: var(--paper);
+  border-radius: 1px;
+  flex-shrink: 0;
+}
+
+/* ── Stage outer ─────────────────────────────────────────────────── */
+.stage-outer {
+  max-width: 960px;
+  margin: 20px auto 0;
+  position: relative;
+}
+
+.stage {
+  position: relative;
+  width: 960px;
+  height: 560px;
+  transform-origin: top left;
+  --cycle: 16s;
+  /* off-white paper with dotted engineering grid */
+  background-color: var(--paper);
+  background-image:
+    radial-gradient(circle, var(--paper-grid) 1px, transparent 1px);
+  background-size: 20px 20px;
+  border: 1px solid var(--ink-rule);
+  overflow: hidden;
+}
+
+/* ── SVG rails layer ─────────────────────────────────────────────── */
+.rails {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: visible;
+}
+
+/* Ghost base paths — always faintly visible like pencil guides */
+.rail-ghost {
+  fill: none;
+  stroke: var(--ink-faint);
+  stroke-width: 0.8;
+  stroke-dasharray: 4 5;
+  opacity: 0.5;
+}
+
+/* Self-drawing ink rails — stroke-dashoffset animation */
+.rail-draw {
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 1;
+  stroke-linecap: round;
+}
+
+/* Packet 1 approach rail: msg1 → node (top-center flow) */
+.rd-1 {
+  stroke-dasharray: 220;
+  stroke-dashoffset: 220;
+  animation: rdDraw1 var(--cycle) linear infinite;
+}
+/* Packet 2 approach rail */
+.rd-2 {
+  stroke-dasharray: 220;
+  stroke-dashoffset: 220;
+  animation: rdDraw2 var(--cycle) linear infinite;
+}
+/* Packet 3 approach rail */
+.rd-3 {
+  stroke-dasharray: 220;
+  stroke-dashoffset: 220;
+  animation: rdDraw3 var(--cycle) linear infinite;
+}
+
+/* Fan-out rails: node → apps */
+.fan-1 {
+  stroke-dasharray: 280;
+  stroke-dashoffset: 280;
+  animation: fanDraw1 var(--cycle) linear infinite;
+}
+.fan-2 {
+  stroke-dasharray: 220;
+  stroke-dashoffset: 220;
+  animation: fanDraw2 var(--cycle) linear infinite;
+}
+.fan-3 {
+  stroke-dasharray: 280;
+  stroke-dashoffset: 280;
+  animation: fanDraw3 var(--cycle) linear infinite;
+}
+
+/* Dimension-line annotation arrows — static, ink */
+.dim-line {
+  stroke: var(--ink-rule);
+  stroke-width: 0.7;
+  fill: none;
+  marker-end: url(#arrowhead);
+}
+
+/* ── Keyframes: rail draw-in ─────────────────────────────────────── */
+/* msg timing (same as variant A/B pattern):
+   pkt1 departs ~19%, arrives ~30%
+   pkt2 departs ~44%, arrives ~55%
+   pkt3 departs ~80%, arrives ~91%  */
+
+/* Approach rails draw just before packet fires */
+@keyframes rdDraw1 {
+  0%, 15%  { stroke-dashoffset: 220; opacity: 0; }
+  15.5%    { opacity: 0.7; }
+  19%      { stroke-dashoffset: 0; opacity: 0.7; }
+  30%, 33% { stroke-dashoffset: 0; opacity: 0.3; }
+  36%, 100%{ stroke-dashoffset: 220; opacity: 0; }
+}
+@keyframes rdDraw2 {
+  0%, 40%  { stroke-dashoffset: 220; opacity: 0; }
+  40.5%    { opacity: 0.7; }
+  44%      { stroke-dashoffset: 0; opacity: 0.7; }
+  55%, 58% { stroke-dashoffset: 0; opacity: 0.3; }
+  61%, 100%{ stroke-dashoffset: 220; opacity: 0; }
+}
+@keyframes rdDraw3 {
+  0%, 76%  { stroke-dashoffset: 220; opacity: 0; }
+  76.5%    { opacity: 0.7; }
+  80%      { stroke-dashoffset: 0; opacity: 0.7; }
+  91%, 94% { stroke-dashoffset: 0; opacity: 0.3; }
+  97%, 100%{ stroke-dashoffset: 220; opacity: 0; }
+}
+
+/* Fan-out rails draw when packet exits node */
+@keyframes fanDraw1 {
+  0%, 27%  { stroke-dashoffset: 280; opacity: 0; }
+  27.5%    { opacity: 0.8; }
+  30%      { stroke-dashoffset: 0; }
+  41%, 44% { stroke-dashoffset: 0; opacity: 0.3; }
+  48%, 100%{ stroke-dashoffset: 280; opacity: 0; }
+}
+@keyframes fanDraw2 {
+  0%, 52%  { stroke-dashoffset: 220; opacity: 0; }
+  52.5%    { opacity: 0.8; }
+  55%      { stroke-dashoffset: 0; }
+  66%, 69% { stroke-dashoffset: 0; opacity: 0.3; }
+  73%, 100%{ stroke-dashoffset: 220; opacity: 0; }
+}
+@keyframes fanDraw3 {
+  0%, 88%  { stroke-dashoffset: 280; opacity: 0; }
+  88.5%    { opacity: 0.8; }
+  91%      { stroke-dashoffset: 0; }
+  97%, 99% { stroke-dashoffset: 0; opacity: 0.3; }
+  100%     { stroke-dashoffset: 280; opacity: 0; }
+}
+
+/* ── Chat message cards — monoline on paper ──────────────────────── */
+.msg {
+  position: absolute;
+  z-index: 4;
+  width: 260px;
+  background: #fff;
+  border: 1px solid var(--border-card);
+  border-radius: 4px;
+  padding: 10px 12px;
+  display: flex;
+  gap: 9px;
+  align-items: flex-start;
+  opacity: 0;
+  /* clean flat shadow, no colored glow */
+  box-shadow: 0 2px 12px rgba(0,0,0,0.07), 0 0 0 1px rgba(0,0,0,0.04);
+}
+
+/* Source badge — monoline SVG circle */
+.src-badge {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.msg-body { flex: 1; min-width: 0; }
+
+.msg-source {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.msg-text {
+  font-size: 13px;
+  color: var(--ink);
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+/* Photo thumbnail — ink style, no color fill */
+.photo-thumb {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(0,0,0,0.03);
+  border: 1px solid var(--border-card);
+  border-radius: 3px;
+  padding: 5px 8px;
+  margin-bottom: 4px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--ink-dim);
+}
+
+/* Message animation windows — same timing structure as variant A */
+.msg-1 { animation: msgIn1 var(--cycle) ease infinite; }
+.msg-2 { animation: msgIn2 var(--cycle) ease infinite; }
+.msg-3 { animation: msgIn3 var(--cycle) ease infinite; }
+
+@keyframes msgIn1 {
+  0%,1.5%     { opacity:0; transform:translateY(8px); }
+  3%,17%      { opacity:1; transform:translateY(0); }
+  20%,22%     { opacity:0; transform:scale(0.6) translateY(-4px); }
+  23%,100%    { opacity:0; transform:translateY(8px); }
+}
+@keyframes msgIn2 {
+  0%,35%      { opacity:0; transform:translateY(8px); }
+  37%,50%     { opacity:1; transform:translateY(0); }
+  53%,55%     { opacity:0; transform:scale(0.6) translateY(-4px); }
+  56%,100%    { opacity:0; transform:translateY(8px); }
+}
+@keyframes msgIn3 {
+  0%,65%      { opacity:0; transform:translateY(8px); }
+  67%,80%     { opacity:1; transform:translateY(0); }
+  83%,85%     { opacity:0; transform:scale(0.6) translateY(-4px); }
+  86%,100%    { opacity:0; transform:translateY(8px); }
+}
+
+/* ── Packets — small square "data mark" traveling the rail ───────── */
+.pkt {
+  position: absolute;
+  left: 0; top: 0;
+  z-index: 10;
+  width: 8px;
+  height: 8px;
+  border: 1.5px solid var(--pkt-ink);
+  background: var(--paper);
+  border-radius: 1px;
+  offset-rotate: 0deg;
+  opacity: 0;
+  /* picks up color near destination via animation */
+}
+
+.pkt-1 { animation: pktGo1 var(--cycle) linear infinite; }
+.pkt-2 { animation: pktGo2 var(--cycle) linear infinite; }
+.pkt-3 { animation: pktGo3 var(--cycle) linear infinite; }
+
+@keyframes pktGo1 {
+  0%,18.5%    { offset-distance: 0%; opacity:0; border-color: var(--pkt-ink); }
+  19%         { opacity:1; offset-distance: 0%; border-color: var(--pkt-ink); }
+  27%         { opacity:1; offset-distance: 75%; border-color: var(--pkt-ink); }
+  29%         { opacity:1; offset-distance: 100%; border-color: var(--c-run); }
+  29.5%       { opacity:0; offset-distance: 100%; }
+  30%,100%    { offset-distance: 0%; opacity:0; }
+}
+@keyframes pktGo2 {
+  0%,43.5%    { offset-distance: 0%; opacity:0; border-color: var(--pkt-ink); }
+  44%         { opacity:1; offset-distance: 0%; border-color: var(--pkt-ink); }
+  52%         { opacity:1; offset-distance: 75%; border-color: var(--pkt-ink); }
+  54%         { opacity:1; offset-distance: 100%; border-color: var(--c-meal); }
+  54.5%       { opacity:0; offset-distance: 100%; }
+  55%,100%    { offset-distance: 0%; opacity:0; }
+}
+@keyframes pktGo3 {
+  0%,79.5%    { offset-distance: 0%; opacity:0; border-color: var(--pkt-ink); }
+  80%         { opacity:1; offset-distance: 0%; border-color: var(--pkt-ink); }
+  88%         { opacity:1; offset-distance: 75%; border-color: var(--pkt-ink); }
+  90%         { opacity:1; offset-distance: 100%; border-color: var(--c-book); }
+  90.5%       { opacity:0; offset-distance: 100%; }
+  91%,100%    { offset-distance: 0%; opacity:0; }
+}
+
+/* ── Node — compass circle with crosshair ────────────────────────── */
+.node-wrap {
+  position: absolute;
+  z-index: 5;
+  /* center at 480, 264 — node size 140×140 */
+  left: 410px;
+  top: 194px;
+  width: 140px;
+  height: 140px;
+}
+
+/* Node pulse reaction when packet passes through */
+.node-ring-el {
+  animation: nodeRingPulse var(--cycle) ease-out infinite;
+}
+@keyframes nodeRingPulse {
+  0%,26%   { opacity: 1; }
+  27%      { opacity: 0.4; }
+  28%      { opacity: 1; }
+  52%,53%  { opacity: 0.4; }
+  54%      { opacity: 1; }
+  88%,89%  { opacity: 0.4; }
+  90%,100% { opacity: 1; }
+}
+
+/* Slowly rotating orbit ring */
+/* Orbit: the ellipse stays FIXED; motion happens ALONG it —
+   dashes flow around the path and a traveler dot rides it (no propeller spin). */
+.node-orbit-el {
+  animation: dashFlow 8s linear infinite;
+}
+@keyframes dashFlow {
+  to { stroke-dashoffset: -100; } /* dasharray period = 10 → seamless loop */
+}
+
+.orbit-dot {
+  position: absolute;
+  left: 0; top: 0;
+  z-index: 2;
+  width: 6px; height: 6px;
+  border: 1.2px solid var(--ink);
+  border-radius: 50%;
+  background: var(--paper);
+  offset-rotate: 0deg;
+  /* same ellipse tilted +18° (left high) — endpoints are the rotated major-axis ends */
+  offset-path: path('M622.7,310.4 A150,30 18 1,1 337.3,217.6 A150,30 18 1,1 622.7,310.4');
+  animation: orbitTravel 8s linear infinite;
+}
+@keyframes orbitTravel {
+  from { offset-distance: 0%; }
+  to   { offset-distance: 100%; }
+}
+
+/* Neural-net glyph — breathes brighter when a packet passes the node */
+.nn-glyph {
+  opacity: 0.55;
+  animation: nnPulse var(--cycle) ease-out infinite;
+}
+@keyframes nnPulse {
+  0%,25%   { opacity: 0.55; }
+  27%      { opacity: 1; }
+  30%,51%  { opacity: 0.55; }
+  53%      { opacity: 1; }
+  56%,87%  { opacity: 0.55; }
+  89%      { opacity: 1; }
+  92%,100% { opacity: 0.55; }
+}
+
+/* ── Terminal glimpse INSIDE the node ───────────────────────────── */
+.node-terminal {
+  position: absolute;
+  /* top-left telemetry block — owner preference, keep OUT of the node */
+  left: 22px;
+  top: 62px;
+  width: 150px;
+  z-index: 6;
+  font-family: var(--font-mono);
+  font-size: 8px;
+  line-height: 1.5;
+  color: var(--ink-dim);
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.tlog {
+  display: block;
+  white-space: nowrap;
+  opacity: 0;
+}
+
+/* Log line timing — absolute windows, same as variant A's approach */
+/* Set A: fires at pkt1 approach ~19% */
+.tl-a1 { animation: tlogA1 var(--cycle) linear infinite; }
+.tl-a2 { animation: tlogA2 var(--cycle) linear infinite; }
+/* Set B: fires at pkt2 ~44% */
+.tl-b1 { animation: tlogB1 var(--cycle) linear infinite; }
+.tl-b2 { animation: tlogB2 var(--cycle) linear infinite; }
+/* Set C: fires at pkt3 ~80% */
+.tl-c1 { animation: tlogC1 var(--cycle) linear infinite; }
+.tl-c2 { animation: tlogC2 var(--cycle) linear infinite; }
+
+@keyframes tlogA1 { 0%,20%{opacity:0} 21%,96%{opacity:1} 97%,100%{opacity:0} }
+@keyframes tlogA2 { 0%,26%{opacity:0} 27%,96%{opacity:1} 97%,100%{opacity:0} }
+@keyframes tlogB1 { 0%,45%{opacity:0} 46%,96%{opacity:1} 97%,100%{opacity:0} }
+@keyframes tlogB2 { 0%,51%{opacity:0} 52%,96%{opacity:1} 97%,100%{opacity:0} }
+@keyframes tlogC1 { 0%,81%{opacity:0} 82%,96%{opacity:1} 97%,100%{opacity:0} }
+@keyframes tlogC2 { 0%,87%{opacity:0} 88%,96%{opacity:1} 97%,100%{opacity:0} }
+
+/* Blinking cursor */
+.term-cur {
+  display: inline-block;
+  width: 5px;
+  height: 8px;
+  background: var(--ink);
+  vertical-align: text-bottom;
+  animation: curBlink 0.9s step-end infinite;
+  opacity: 0.6;
+}
+@keyframes curBlink { 0%,100%{opacity:0.6} 50%{opacity:0} }
+
+/* ── App destination cards ───────────────────────────────────────── */
+.app {
+  position: absolute;
+  z-index: 3;
+  width: 224px;
+  background: #fff;
+  border: 1px solid var(--border-card);
+  border-radius: 3px;
+  padding: 9px 11px;
+  box-shadow: 0 1px 8px rgba(0,0,0,0.06);
+}
+
+.app-head {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  margin-bottom: 7px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border-card);
+}
+.app-name {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.app-db {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--ink-dim);
+  letter-spacing: 0.03em;
+}
+.app-plus {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  opacity: 0;
+  letter-spacing: 0.04em;
+}
+/* "+row" badge picks up chroma only during its flash */
+.app-1 .app-plus { color: var(--c-run);  animation: plus1 var(--cycle) infinite; }
+.app-2 .app-plus { color: var(--c-meal); animation: plus2 var(--cycle) infinite; }
+.app-3 .app-plus { color: var(--c-book); animation: plus3 var(--cycle) infinite; }
+
+@keyframes plus1 { 0%,30%{opacity:0} 32%,44%{opacity:1} 45%,100%{opacity:0} }
+@keyframes plus2 { 0%,55%{opacity:0} 57%,68%{opacity:1} 69%,100%{opacity:0} }
+@keyframes plus3 { 0%,91%{opacity:0} 93%,97%{opacity:1} 98%,100%{opacity:0} }
+
+/* Mini data table — drafting style, 4 columns */
+.tbl { font-family: var(--font-mono); font-size: 9px; }
+.tr {
+  display: grid;
+  grid-template-columns: 36px 1fr 34px 28px;
+  gap: 4px;
+  padding: 2.5px 4px;
+  color: var(--ink-dim);
+  line-height: 1.45;
+  border-radius: 2px;
+  position: relative;
+}
+.tr > span:nth-child(3), .tr > span:nth-child(4) { text-align: right; }
+.tbl-book .tr { grid-template-columns: 36px 1fr 26px 24px; }
+.tr.th {
+  color: rgba(0,0,0,0.35);
+  font-size: 7.5px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--border-card);
+  padding-bottom: 3px;
+  margin-bottom: 2px;
+}
+
+/* New row: slides in and gains its chroma tick mark */
+.new-row {
+  color: var(--ink) !important;
+  opacity: 0;
+  position: relative;
+}
+/* the colored tick on the left edge */
+.new-row::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 3px; bottom: 3px;
+  width: 2px;
+  border-radius: 1px;
+  opacity: 0;
+}
+
+.app-1 .new-row { animation: rowIn1 var(--cycle) infinite; }
+.app-1 .new-row::before { background: var(--c-run);  animation: tickIn1 var(--cycle) infinite; }
+.app-2 .new-row { animation: rowIn2 var(--cycle) infinite; }
+.app-2 .new-row::before { background: var(--c-meal); animation: tickIn2 var(--cycle) infinite; }
+.app-3 .new-row { animation: rowIn3 var(--cycle) infinite; }
+.app-3 .new-row::before { background: var(--c-book); animation: tickIn3 var(--cycle) infinite; }
+
+@keyframes rowIn1 {
+  0%,30%  { opacity:0; transform:translateX(-4px); }
+  33%,97% { opacity:1; transform:none; }
+  100%    { opacity:0; }
+}
+@keyframes rowIn2 {
+  0%,55%  { opacity:0; transform:translateX(-4px); }
+  58%,97% { opacity:1; transform:none; }
+  100%    { opacity:0; }
+}
+@keyframes rowIn3 {
+  0%,91%  { opacity:0; transform:translateX(-4px); }
+  94%,98% { opacity:1; transform:none; }
+  100%    { opacity:0; }
+}
+@keyframes tickIn1 {
+  0%,30%  { opacity:0; }
+  33%,97% { opacity:1; }
+  100%    { opacity:0; }
+}
+@keyframes tickIn2 {
+  0%,55%  { opacity:0; }
+  58%,97% { opacity:1; }
+  100%    { opacity:0; }
+}
+@keyframes tickIn3 {
+  0%,91%  { opacity:0; }
+  94%,98% { opacity:1; }
+  100%    { opacity:0; }
+}
+
+/* ── Dimension-line annotation labels ────────────────────────────── */
+/* These are absolutely positioned text labels over the SVG rails */
+.dim-label {
+  position: absolute;
+  z-index: 2;
+  font-family: var(--font-mono);
+  font-size: 8px;
+  color: var(--ink-dim);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  pointer-events: none;
+  opacity: 0.6;
+  white-space: nowrap;
+}
+
+/* ── Positions ───────────────────────────────────────────────────── */
+/* Messages: all emerge from a central position (top-center, like variant A) */
+.msg-1 { left: 348px; top: 28px; }
+.msg-2 { left: 348px; top: 28px; }
+.msg-3 { left: 348px; top: 28px; }
+
+/* Apps: spread at bottom */
+.app-1 { left: 40px;  top: 412px; }
+.app-2 { left: 368px; top: 412px; }
+.app-3 { left: 696px; top: 412px; }
+
+/* ── Annotation label positions ─────────────────────────────────── */
+.dim-capture { left: 508px; top: 148px; }
+.dim-route   { left: 508px; top: 322px; }
+.dim-commit  { left: 508px; top: 384px; }
+
+/* ── Footnote ────────────────────────────────────────────────────── */
+.foot {
+  text-align: center;
+  color: var(--ink-dim);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  max-width: 680px;
+  margin: 12px auto 0;
+  line-height: 1.6;
+  letter-spacing: 0.01em;
+}
+
+/* ── Variant chip ─────────────────────────────────────────────────── */
+#variant-chip {
+  position: fixed;
+  top: 10px; left: 10px;
+  z-index: 9999;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--ink-dim);
+  background: rgba(245,243,239,0.9);
+  border: 1px solid var(--border-card);
+  border-radius: 3px;
+  padding: 4px 9px;
+  letter-spacing: 0.05em;
+  pointer-events: none;
+}
+
+/* ── Replay button ───────────────────────────────────────────────── */
+#replay-btn {
+  position: fixed;
+  bottom: 12px; right: 12px;
+  z-index: 9999;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-dim);
+  background: rgba(245,243,239,0.9);
+  border: 1px solid var(--border-card);
+  border-radius: 3px;
+  padding: 5px 11px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+  opacity: 0.6;
+}
+#replay-btn:hover {
+  opacity: 1;
+  color: var(--ink);
+  border-color: var(--ink-dim);
+}
+
+/* ── Toast ───────────────────────────────────────────────────────── */
+#toast {
+  position: fixed;
+  bottom: 48px; right: 12px;
+  z-index: 9999;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  background: rgba(245,243,239,0.96);
+  color: var(--ink);
+  border: 1px solid var(--border-card);
+  padding: 7px 13px;
+  border-radius: 3px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  pointer-events: none;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+}
+
+/* ── Reduced-motion static fallback ──────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .stage * { animation: none !important; transition: none !important; }
+  .msg-1 { opacity: 1 !important; transform: none !important; }
+  .msg-2, .msg-3 { opacity: 0 !important; }
+  .pkt { opacity: 0 !important; }
+  .tlog { opacity: 0 !important; }
+  .new-row { opacity: 1 !important; transform: none !important; }
+  .new-row::before { opacity: 1 !important; }
+  .app-plus { opacity: 0 !important; }
+  .rd-1,.rd-2,.rd-3 { stroke-dashoffset: 0 !important; opacity: 0.4 !important; }
+  .fan-1,.fan-2,.fan-3 { stroke-dashoffset: 0 !important; opacity: 0.4 !important; }
+}
+</style>
+</head>
+<body>
+
+<!-- ── Variant chip ─────────────────────────────────────────────── -->
+
+<!-- ════════════════════════════════════════════════════════════════ -->
+<div class="page">
+
+  <!-- Header -->
+  <header class="hero-head">
+    <div class="wordmark">
+      <!-- Monoline compass-circle glyph as wordmark icon -->
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+        <circle cx="10" cy="10" r="8.5" stroke="#1a1a1a" stroke-width="1"/>
+        <!-- crosshair ticks -->
+        <line x1="10" y1="1.5" x2="10" y2="4"   stroke="#1a1a1a" stroke-width="1"/>
+        <line x1="10" y1="16" x2="10" y2="18.5"  stroke="#1a1a1a" stroke-width="1"/>
+        <line x1="1.5" y1="10" x2="4" y2="10"   stroke="#1a1a1a" stroke-width="1"/>
+        <line x1="16" y1="10" x2="18.5" y2="10" stroke="#1a1a1a" stroke-width="1"/>
+      </svg>
+      ingestion
+    </div>
+    <button class="btn-gh" onclick="showToast('(sketch) would open the GitHub repo')">View on GitHub</button>
+  </header>
+
+  <!-- Copy block -->
+  <div class="hero-copy">
+    <div class="kicker">ETL for everyday life</div>
+    <h1>Casual conversation<br><span class="h1-into">into</span> <span class="h1-dim">structured data.</span></h1>
+    <p class="sub">Text like you normally would — “ran 5km this morning”, a photo of dinner. <strong>ingestion</strong> structures it into typed, reviewed rows in the databases your apps already own.</p>
+    <ul class="points">
+      <li>one contract file per app</li>
+      <li>no glue code</li>
+      <li>local-first</li>
+    </ul>
+  </div>
+
+  <!-- ── Animated stage ──────────────────────────────────────────── -->
+  <div class="stage-outer" id="stage-outer">
+  <div class="stage" id="stage">
+
+    <!-- SVG defs: arrowhead marker for dimension lines -->
+    <svg width="0" height="0" style="position:absolute">
+      <defs>
+        <marker id="arrowhead" markerWidth="6" markerHeight="5"
+                refX="3" refY="2.5" orient="auto">
+          <polygon points="0 0, 6 2.5, 0 5" fill="rgba(0,0,0,0.25)"/>
+        </marker>
+        <marker id="arrowhead-rev" markerWidth="6" markerHeight="5"
+                refX="3" refY="2.5" orient="auto-start-reverse">
+          <polygon points="0 0, 6 2.5, 0 5" fill="rgba(0,0,0,0.25)"/>
+        </marker>
+      </defs>
+    </svg>
+
+    <!-- Rails SVG -->
+    <svg class="rails" viewBox="0 0 960 560" width="960" height="560" aria-hidden="true">
+
+      <!-- Ghost base rails — always faintly visible -->
+      <!-- approach: top → node (all messages share center top approach) -->
+      <path class="rail-ghost" d="M480,100 C480,130 480,155 480,170"/>
+      <!-- fan-out: node → apps -->
+      <path class="rail-ghost" d="M455,352 C420,382 250,400 152,412"/>
+      <path class="rail-ghost" d="M480,358 C480,378 480,398 480,412"/>
+      <path class="rail-ghost" d="M505,352 C540,382 710,400 808,412"/>
+
+      <!-- Animated self-drawing approach rails -->
+      <path class="rail-draw rd-1" d="M480,100 C480,130 480,155 480,170"/>
+      <path class="rail-draw rd-2" d="M480,100 C480,130 480,155 480,170"/>
+      <path class="rail-draw rd-3" d="M480,100 C480,130 480,155 480,170"/>
+
+      <!-- Animated fan-out rails: left (RunLog), center (Plates), right (Shelf) -->
+      <path class="rail-draw fan-1" d="M455,352 C420,382 250,400 152,412"/>
+      <path class="rail-draw fan-2" d="M480,358 C480,378 480,398 480,412"/>
+      <path class="rail-draw fan-3" d="M505,352 C540,382 710,400 808,412"/>
+
+      <!-- Dimension leader lines — static, like engineering drawing annotations -->
+      <!-- "capture" label bracket: left of approach rail -->
+      <line class="dim-line" x1="470" y1="110" x2="440" y2="110"
+            stroke="rgba(0,0,0,0.18)" stroke-width="0.7" stroke-dasharray="3 3"/>
+      <line class="dim-line" x1="440" y1="110" x2="440" y2="180"
+            stroke="rgba(0,0,0,0.18)" stroke-width="0.7" stroke-dasharray="3 3"/>
+      <!-- "route/commit" right bracket -->
+      <line class="dim-line" x1="558" y1="345" x2="594" y2="345"
+            stroke="rgba(0,0,0,0.18)" stroke-width="0.7" stroke-dasharray="3 3"/>
+      <line class="dim-line" x1="542" y1="385" x2="594" y2="385"
+            stroke="rgba(0,0,0,0.18)" stroke-width="0.7" stroke-dasharray="3 3"/>
+      <line class="dim-line" x1="594" y1="345" x2="594" y2="385"
+            stroke="rgba(0,0,0,0.18)" stroke-width="0.7" stroke-dasharray="3 3"/>
+
+      <!-- Node compass circle — enlarged centerpiece -->
+      <!-- center: 480, 264 — radius 92 outer, 66 inner -->
+      <circle class="node-ring-el" cx="480" cy="264" r="92"
+              stroke="#1a1a1a" stroke-width="1.2" fill="none"/>
+      <!-- Inner tick ring (faint) -->
+      <circle cx="480" cy="264" r="66"
+              stroke="rgba(0,0,0,0.1)" stroke-width="0.7" fill="none"/>
+
+      <!-- Crosshair tick marks on the circle -->
+      <line x1="480" y1="167" x2="480" y2="177" stroke="#1a1a1a" stroke-width="1"/>
+      <line x1="480" y1="351" x2="480" y2="361" stroke="#1a1a1a" stroke-width="1"/>
+      <line x1="383" y1="264" x2="393" y2="264" stroke="#1a1a1a" stroke-width="1"/>
+      <line x1="567" y1="264" x2="577" y2="264" stroke="#1a1a1a" stroke-width="1"/>
+
+      <!-- 45-degree minor ticks (smaller) -->
+      <line x1="415" y1="199" x2="420" y2="204" stroke="rgba(0,0,0,0.25)" stroke-width="0.8"/>
+      <line x1="545" y1="199" x2="540" y2="204" stroke="rgba(0,0,0,0.25)" stroke-width="0.8"/>
+      <line x1="415" y1="329" x2="420" y2="324" stroke="rgba(0,0,0,0.25)" stroke-width="0.8"/>
+      <line x1="545" y1="329" x2="540" y2="324" stroke="rgba(0,0,0,0.25)" stroke-width="0.8"/>
+
+      <!-- Neural-net glyph in the upper arc — subtle "llm inside" cue.
+           Replaces the top crosshair segment. 2-3-2 layers, monoline. -->
+      <g class="nn-glyph">
+        <!-- edges L1→L2 -->
+        <line x1="450" y1="194" x2="480" y2="188" stroke="rgba(0,0,0,0.14)" stroke-width="0.6"/>
+        <line x1="450" y1="194" x2="480" y2="203" stroke="rgba(0,0,0,0.14)" stroke-width="0.6"/>
+        <line x1="450" y1="194" x2="480" y2="218" stroke="rgba(0,0,0,0.14)" stroke-width="0.6"/>
+        <line x1="450" y1="212" x2="480" y2="188" stroke="rgba(0,0,0,0.14)" stroke-width="0.6"/>
+        <line x1="450" y1="212" x2="480" y2="203" stroke="rgba(0,0,0,0.14)" stroke-width="0.6"/>
+        <line x1="450" y1="212" x2="480" y2="218" stroke="rgba(0,0,0,0.14)" stroke-width="0.6"/>
+        <!-- edges L2→L3 -->
+        <line x1="480" y1="188" x2="510" y2="194" stroke="rgba(0,0,0,0.14)" stroke-width="0.6"/>
+        <line x1="480" y1="188" x2="510" y2="212" stroke="rgba(0,0,0,0.14)" stroke-width="0.6"/>
+        <line x1="480" y1="203" x2="510" y2="194" stroke="rgba(0,0,0,0.14)" stroke-width="0.6"/>
+        <line x1="480" y1="203" x2="510" y2="212" stroke="rgba(0,0,0,0.14)" stroke-width="0.6"/>
+        <line x1="480" y1="218" x2="510" y2="194" stroke="rgba(0,0,0,0.14)" stroke-width="0.6"/>
+        <line x1="480" y1="218" x2="510" y2="212" stroke="rgba(0,0,0,0.14)" stroke-width="0.6"/>
+        <!-- nodes -->
+        <circle cx="450" cy="194" r="1.8" stroke="#1a1a1a" stroke-width="0.8" fill="#f5f3ef"/>
+        <circle cx="450" cy="212" r="1.8" stroke="#1a1a1a" stroke-width="0.8" fill="#f5f3ef"/>
+        <circle cx="480" cy="188" r="1.8" stroke="#1a1a1a" stroke-width="0.8" fill="#f5f3ef"/>
+        <circle cx="480" cy="203" r="1.8" stroke="#1a1a1a" stroke-width="0.8" fill="#f5f3ef"/>
+        <circle cx="480" cy="218" r="1.8" stroke="#1a1a1a" stroke-width="0.8" fill="#f5f3ef"/>
+        <circle cx="510" cy="194" r="1.8" stroke="#1a1a1a" stroke-width="0.8" fill="#f5f3ef"/>
+        <circle cx="510" cy="212" r="1.8" stroke="#1a1a1a" stroke-width="0.8" fill="#f5f3ef"/>
+      </g>
+      <line x1="480" y1="316" x2="480" y2="348" stroke="rgba(0,0,0,0.12)" stroke-width="0.7"/>
+      <line x1="396" y1="264" x2="428" y2="264" stroke="rgba(0,0,0,0.12)" stroke-width="0.7"/>
+      <line x1="532" y1="264" x2="564" y2="264" stroke="rgba(0,0,0,0.12)" stroke-width="0.7"/>
+
+      <!-- Single orbit ellipse — tilted +18° (left side high) for a 3D orbital plane -->
+      <ellipse class="node-orbit-el" cx="480" cy="264" rx="150" ry="30"
+               transform="rotate(18 480 264)"
+               stroke="rgba(0,0,0,0.18)" stroke-width="0.8" fill="none"
+               stroke-dasharray="6 4"/>
+
+    </svg>
+
+    <!-- Dimension annotation labels -->
+    <div class="dim-label dim-capture" style="left:418px;top:140px;">— capture</div>
+    <div class="dim-label" style="left:602px;top:358px;">route · commit →</div>
+
+    <!-- Orbit traveler dot — rides the elliptical path -->
+    <div class="orbit-dot" aria-hidden="true"></div>
+
+    <!-- ── Chat message 1: WhatsApp ────────────────────────────── -->
+    <div class="msg msg-1" aria-label="WhatsApp message: Ran 5km this morning, felt great">
+      <div class="src-badge">
+        <!-- Monoline WhatsApp badge: circle + speech-phone outline -->
+        <svg width="28" height="28" viewBox="0 0 28 28" fill="none" aria-hidden="true">
+          <circle cx="14" cy="14" r="12" stroke="#25d366" stroke-width="1.1"/>
+          <path d="M14 8C10.7 8 8 10.7 8 14c0 1.2.33 2.34.9 3.3L8 20l2.8-.87A5.97 5.97 0 0014 20c3.3 0 6-2.7 6-6s-2.7-6-6-6z"
+                stroke="#25d366" stroke-width="1" fill="none"/>
+          <path d="M11.5 12c.3.6.7 1.2 1.3 1.7.6.5 1.1 1 1.7 1.3l.6-.6c.15-.15.4-.15.55-.05.6.3 1.05.45 1.35.52.25.07.3.3.3.47v1.2c0 .22-.22.47-.47.47C12.2 17 11 14 11 12.47c0-.22.17-.47.47-.47h1.2c.22 0 .4.15.47.3.07.3.22.75.52 1.35.1.15 0 .4-.05.55l-.1.1z"
+                stroke="#25d366" stroke-width="0.8" fill="none"/>
+        </svg>
+      </div>
+      <div class="msg-body">
+        <div class="msg-source">
+          <span>WhatsApp</span>
+        </div>
+        <div class="msg-text">Ran 5km this morning, felt great</div>
+      </div>
+    </div>
+
+    <!-- ── Chat message 2: Telegram (photo) ────────────────────── -->
+    <div class="msg msg-2" aria-label="Telegram message: dinner.jpg — carbonara night">
+      <div class="src-badge">
+        <!-- Monoline Telegram badge -->
+        <svg width="28" height="28" viewBox="0 0 28 28" fill="none" aria-hidden="true">
+          <circle cx="14" cy="14" r="12" stroke="#29b6f6" stroke-width="1.1"/>
+          <!-- paper-plane outline -->
+          <polygon points="5,14 23,7 18,21 13,16 10,18"
+                   stroke="#29b6f6" stroke-width="1" fill="none"
+                   stroke-linejoin="round" stroke-linecap="round"/>
+          <line x1="13" y1="16" x2="16.5" y2="9"
+                stroke="#29b6f6" stroke-width="0.8" opacity="0.7"/>
+        </svg>
+      </div>
+      <div class="msg-body">
+        <div class="msg-source">
+          <span>Telegram</span>
+        </div>
+        <div class="photo-thumb">
+          <!-- monoline image icon -->
+          <svg width="16" height="14" viewBox="0 0 16 14" fill="none" aria-hidden="true">
+            <rect x="0.5" y="0.5" width="15" height="13" rx="1.5"
+                  stroke="rgba(0,0,0,0.35)" stroke-width="1" fill="none"/>
+            <circle cx="4" cy="4.5" r="1.5" stroke="rgba(0,0,0,0.35)" stroke-width="0.8" fill="none"/>
+            <path d="M0.5 9.5l3.5-3 3 2.5 2.5-2 5 3.5"
+                  stroke="rgba(0,0,0,0.3)" stroke-width="0.8" fill="none"/>
+          </svg>
+          <span>dinner.jpg</span>
+        </div>
+        <div class="msg-text" style="font-size:12px;color:var(--ink-dim);">carbonara night</div>
+      </div>
+    </div>
+
+    <!-- ── Chat message 3: Signal ──────────────────────────────── -->
+    <div class="msg msg-3" aria-label="Signal message: Finished Dune — 9/10">
+      <div class="src-badge">
+        <!-- Monoline Signal badge -->
+        <svg width="28" height="28" viewBox="0 0 28 28" fill="none" aria-hidden="true">
+          <circle cx="14" cy="14" r="12" stroke="#3a76f0" stroke-width="1.1"/>
+          <!-- speech bubble outline -->
+          <path d="M14 7C9.6 7 6 10.1 6 13.8c0 1.7.68 3.2 1.8 4.4L7 21l3.2-1.05A8.5 8.5 0 0014 20.6c4.4 0 8-3.1 8-6.8S18.4 7 14 7z"
+                stroke="#3a76f0" stroke-width="1" fill="none"/>
+          <!-- three dots -->
+          <circle cx="11" cy="13.8" r="1" fill="#3a76f0"/>
+          <circle cx="14" cy="13.8" r="1" fill="#3a76f0"/>
+          <circle cx="17" cy="13.8" r="1" fill="#3a76f0"/>
+        </svg>
+      </div>
+      <div class="msg-body">
+        <div class="msg-source">
+          <span>Signal</span>
+        </div>
+        <div class="msg-text">Finished Dune — 9/10</div>
+      </div>
+    </div>
+
+    <!-- ── Terminal glimpse inside the node ──────────────────────── -->
+    <div class="node-terminal" aria-label="ingestion router log" aria-live="polite">
+      <span class="tlog tl-a1">▸ route fitness.run (.94)</span>
+      <span class="tlog tl-a2">▸ commit a1f3 → fitness.db</span>
+      <span class="tlog tl-b1">▸ route meals.dish (.91)</span>
+      <span class="tlog tl-b2">▸ commit b7e2 → meals.db</span>
+      <span class="tlog tl-c1">▸ route books.read (.96)</span>
+      <span class="tlog tl-c2">▸ commit c9d5 → books.db</span>
+      <!-- blinking cursor always present -->
+      <span class="tlog" style="opacity:1"><span class="term-cur"></span></span>
+    </div>
+
+    <!-- ── Node label ─────────────────────────────────────────────── -->
+    <div style="position:absolute;z-index:6;left:400px;top:236px;width:160px;pointer-events:none;">
+      <div style="font-family:var(--font-mono);font-size:20px;font-weight:600;color:var(--ink);letter-spacing:0.02em;text-align:center;line-height:1.25;">
+        ingestion<br>
+        <span style="font-size:9px;font-weight:400;color:var(--ink-dim);letter-spacing:0.16em;text-transform:uppercase;">router</span>
+      </div>
+    </div>
+
+    <!-- ── Packet dots — travel the approach+fan-out paths ────────── -->
+    <!-- pkt 1: msg1 → node → RunLog (fitness.db) -->
+    <div class="pkt pkt-1"
+         style="offset-path: path('M480,100 C480,140 480,200 480,264 C470,330 420,385 152,412')">
+    </div>
+
+    <!-- pkt 2: msg2 → node → Plates (meals.db) -->
+    <div class="pkt pkt-2"
+         style="offset-path: path('M480,100 C480,140 480,200 480,264 C480,320 480,380 480,412')">
+    </div>
+
+    <!-- pkt 3: msg3 → node → Shelf (books.db) -->
+    <div class="pkt pkt-3"
+         style="offset-path: path('M480,100 C480,140 480,200 480,264 C490,330 540,385 808,412')">
+    </div>
+
+    <!-- ── App cards ─────────────────────────────────────────────── -->
+
+    <!-- RunLog / fitness.db -->
+    <div class="app app-1">
+      <div class="app-head">
+        <!-- monoline run glyph -->
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+          <path d="M4 12l2-5 2 2 2-5" stroke="rgba(0,0,0,0.35)" stroke-width="1"
+                stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <span class="app-name">RunLog</span>
+        <span class="app-db">fitness.db</span>
+        <span class="app-plus">+row</span>
+      </div>
+      <div class="tbl">
+        <div class="tr th"><span>date</span><span>km</span><span>pace</span><span>bpm</span></div>
+        <div class="tr"><span>06-08</span><span>10.2</span><span>5'41</span><span>148</span></div>
+        <div class="tr"><span>06-09</span><span>8.0</span><span>5'52</span><span>144</span></div>
+        <div class="tr new-row"><span>06-10</span><span>5.0</span><span>5'24</span><span>142</span></div>
+      </div>
+    </div>
+
+    <!-- Plates / meals.db -->
+    <div class="app app-2">
+      <div class="app-head">
+        <!-- monoline dish glyph -->
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+          <circle cx="7" cy="7" r="4.5" stroke="rgba(0,0,0,0.35)" stroke-width="1"/>
+          <path d="M7 2v2M7 10v2M2 7h2M10 7h2"
+                stroke="rgba(0,0,0,0.25)" stroke-width="0.8" stroke-linecap="round"/>
+        </svg>
+        <span class="app-name">Plates</span>
+        <span class="app-db">meals.db</span>
+        <span class="app-plus">+row</span>
+      </div>
+      <div class="tbl">
+        <div class="tr th"><span>date</span><span>dish</span><span>kcal</span><span>prot</span></div>
+        <div class="tr"><span>06-08</span><span>ramen</span><span>610</span><span>22g</span></div>
+        <div class="tr"><span>06-09</span><span>tacos</span><span>540</span><span>28g</span></div>
+        <div class="tr new-row"><span>06-10</span><span>carbonara</span><span>720</span><span>24g</span></div>
+      </div>
+    </div>
+
+    <!-- Shelf / books.db -->
+    <div class="app app-3">
+      <div class="app-head">
+        <!-- monoline book glyph -->
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+          <rect x="3" y="2" width="5" height="10" rx="1"
+                stroke="rgba(0,0,0,0.35)" stroke-width="1"/>
+          <rect x="6" y="2" width="5" height="10" rx="1"
+                stroke="rgba(0,0,0,0.25)" stroke-width="0.8" opacity="0.7"/>
+          <line x1="4.5" y1="5" x2="7" y2="5"
+                stroke="rgba(0,0,0,0.2)" stroke-width="0.7"/>
+          <line x1="4.5" y1="7" x2="7" y2="7"
+                stroke="rgba(0,0,0,0.2)" stroke-width="0.7"/>
+        </svg>
+        <span class="app-name">Shelf</span>
+        <span class="app-db">books.db</span>
+        <span class="app-plus">+row</span>
+      </div>
+      <div class="tbl tbl-book">
+        <div class="tr th"><span>date</span><span>title</span><span>★</span><span>tag</span></div>
+        <div class="tr"><span>05-30</span><span>Hyperion</span><span>★9</span><span>sf</span></div>
+        <div class="tr"><span>06-04</span><span>Foundation</span><span>★8</span><span>sf</span></div>
+        <div class="tr new-row"><span>06-10</span><span>Dune</span><span>★9</span><span>sf</span></div>
+      </div>
+    </div>
+
+  </div><!-- /stage -->
+  </div><!-- /stage-outer -->
+
+  <!-- Footnote -->
+  <p class="foot">v1 routes text that already carries enough structure — vaguer input waits for review. Enrichment is on the roadmap.</p>
+
+</div><!-- /page -->
+
+<!-- ── UI chrome ────────────────────────────────────────────────── -->
+<button id="replay-btn" onclick="replayStage()" title="Replay animation from start">&#x27F2; replay</button>
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script>
+  /* fitStages — scale 960×560 canvas to fit its container */
+  function fitStages() {
+    const outer = document.getElementById('stage-outer');
+    const stage = document.getElementById('stage');
+    if (!outer || !stage) return;
+    const scale = Math.min(1, outer.clientWidth / 960);
+    stage.style.transform = 'scale(' + scale + ')';
+    outer.style.height = (560 * scale) + 'px';
+  }
+
+  /* replayStage — clone-node trick restarts all CSS animations */
+  function replayStage() {
+    const outer = document.getElementById('stage-outer');
+    const stage = document.getElementById('stage');
+    if (!stage) return;
+    const clone = stage.cloneNode(true);
+    clone.id = 'stage';
+    stage.replaceWith(clone);
+    fitStages();
+  }
+
+  /* toast helper */
+  let _toastTimer;
+  function showToast(msg) {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.style.opacity = '1';
+    clearTimeout(_toastTimer);
+    _toastTimer = setTimeout(function() { el.style.opacity = '0'; }, 2000);
+  }
+
+  window.addEventListener('resize', fitStages);
+  fitStages();
+</script>
+</body>
+</html>
