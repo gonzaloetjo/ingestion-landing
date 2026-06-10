@@ -449,6 +449,23 @@ h1 {
 }
 
 /* Slowly rotating orbit ring */
+/* Tick ring spins very slowly — calibration dial, not a rifle scope */
+.tick-ring {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: tickSpin 50s linear infinite;
+}
+@keyframes tickSpin { to { transform: rotate(360deg); } }
+
+/* Fine crosshair segments softly appear and disappear */
+.cross-fine {
+  animation: crossBreathe 9s ease-in-out infinite;
+}
+@keyframes crossBreathe {
+  0%, 100% { opacity: 0.15; }
+  50%      { opacity: 1; }
+}
+
 /* Orbit: the ellipse stays FIXED; motion happens ALONG it —
    dashes flow around the path and a traveler dot rides it (no propeller spin). */
 .node-orbit-el {
@@ -882,17 +899,17 @@ h1 {
       <circle cx="480" cy="264" r="66"
               stroke="rgba(0,0,0,0.1)" stroke-width="0.7" fill="none"/>
 
-      <!-- Crosshair tick marks on the circle -->
-      <line x1="480" y1="167" x2="480" y2="177" stroke="#1a1a1a" stroke-width="1"/>
-      <line x1="480" y1="351" x2="480" y2="361" stroke="#1a1a1a" stroke-width="1"/>
-      <line x1="383" y1="264" x2="393" y2="264" stroke="#1a1a1a" stroke-width="1"/>
-      <line x1="567" y1="264" x2="577" y2="264" stroke="#1a1a1a" stroke-width="1"/>
-
-      <!-- 45-degree minor ticks (smaller) -->
-      <line x1="415" y1="199" x2="420" y2="204" stroke="rgba(0,0,0,0.25)" stroke-width="0.8"/>
-      <line x1="545" y1="199" x2="540" y2="204" stroke="rgba(0,0,0,0.25)" stroke-width="0.8"/>
-      <line x1="415" y1="329" x2="420" y2="324" stroke="rgba(0,0,0,0.25)" stroke-width="0.8"/>
-      <line x1="545" y1="329" x2="540" y2="324" stroke="rgba(0,0,0,0.25)" stroke-width="0.8"/>
+      <!-- Tick ring — rotates slowly as one rigid dial, so the 90° marks never sit still -->
+      <g class="tick-ring">
+        <line x1="480" y1="167" x2="480" y2="177" stroke="#1a1a1a" stroke-width="1"/>
+        <line x1="480" y1="351" x2="480" y2="361" stroke="#1a1a1a" stroke-width="1"/>
+        <line x1="383" y1="264" x2="393" y2="264" stroke="#1a1a1a" stroke-width="1"/>
+        <line x1="567" y1="264" x2="577" y2="264" stroke="#1a1a1a" stroke-width="1"/>
+        <line x1="415" y1="199" x2="420" y2="204" stroke="rgba(0,0,0,0.25)" stroke-width="0.8"/>
+        <line x1="545" y1="199" x2="540" y2="204" stroke="rgba(0,0,0,0.25)" stroke-width="0.8"/>
+        <line x1="415" y1="329" x2="420" y2="324" stroke="rgba(0,0,0,0.25)" stroke-width="0.8"/>
+        <line x1="545" y1="329" x2="540" y2="324" stroke="rgba(0,0,0,0.25)" stroke-width="0.8"/>
+      </g>
 
       <!-- Neural-net glyph in the upper arc — subtle "llm inside" cue.
            Replaces the top crosshair segment. 2-3-2 layers, monoline. -->
@@ -920,9 +937,11 @@ h1 {
         <circle cx="510" cy="194" r="1.8" stroke="#1a1a1a" stroke-width="0.8" fill="#f5f3ef"/>
         <circle cx="510" cy="212" r="1.8" stroke="#1a1a1a" stroke-width="0.8" fill="#f5f3ef"/>
       </g>
-      <line x1="480" y1="316" x2="480" y2="348" stroke="rgba(0,0,0,0.12)" stroke-width="0.7"/>
-      <line x1="396" y1="264" x2="428" y2="264" stroke="rgba(0,0,0,0.12)" stroke-width="0.7"/>
-      <line x1="532" y1="264" x2="564" y2="264" stroke="rgba(0,0,0,0.12)" stroke-width="0.7"/>
+      <g class="cross-fine">
+        <line x1="480" y1="316" x2="480" y2="348" stroke="rgba(0,0,0,0.12)" stroke-width="0.7"/>
+        <line x1="396" y1="264" x2="428" y2="264" stroke="rgba(0,0,0,0.12)" stroke-width="0.7"/>
+        <line x1="532" y1="264" x2="564" y2="264" stroke="rgba(0,0,0,0.12)" stroke-width="0.7"/>
+      </g>
 
       <!-- Single orbit ellipse — tilted +18° (left side high) for a 3D orbital plane -->
       <ellipse class="node-orbit-el" cx="480" cy="264" rx="150" ry="30"
